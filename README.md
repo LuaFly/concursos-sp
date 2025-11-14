@@ -29,7 +29,7 @@ Sempre que surgir um concurso que **ainda não existe no banco**, ele:
 - aparece também em **Todos em SP**
 
   ### Api:
- - https://concursos-api.deno.dev/sp
+ - https://concursos-api.deno.dev
  - Autor: [Jeiel0rbit](https://github.com/Jeiel0rbit)
  ### Sistema:
  - Luafly - [Linkedin](https://www.linkedin.com/in/luana-ferreira19/)
