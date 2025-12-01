@@ -50,6 +50,16 @@ function dbRun(sql, params = []) {
   });
 }
 
+function dbAll(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows);
+    });
+  });
+}
+
+// ---- CONFIGS / CONSTANTES ----
 
 const ORGAOS = {
   pcsp: /pol[ií]cia civil|pc[- ]?sp/i,
@@ -92,6 +102,8 @@ const TI_KEYWORDS = [
   /per[ií]to criminal/i,
   /per[ií]to em inform[aá]tica/i,
 ];
+
+// HELPERS DE CAMPOS 
 
 function getOrgao(c) {
   return (
@@ -166,6 +178,19 @@ function filtrarTI(concursos) {
   return concursos.filter(isConcursoTI);
 }
 
+async function getValidHashIdSet() {
+  const rows = await dbAll(
+    `SELECT hash_id
+       FROM concursos
+      WHERE datetime(created_at) >= datetime('now', '-60 days')`
+  );
+  const set = new Set();
+  for (const row of rows) {
+    set.add(row.hash_id);
+  }
+  return set;
+}
+
 async function upsertConcurso(concurso, { isTI, fonte }) {
   const hashId = getConcursoId(concurso);
 
@@ -232,16 +257,24 @@ async function syncConcursosSP() {
     if (isNew) novosPr.push(c);
   }
 
+  const validHashIds = await getValidHashIdSet();
+
+  const abertosValidos = abertos.filter((c) =>
+    validHashIds.has(getConcursoId(c))
+  );
+  const previstosValidos = previstos.filter((c) =>
+    validHashIds.has(getConcursoId(c))
+  );
+
   return {
-    abertos,
-    previstos,
+    abertos: abertosValidos,
+    previstos: previstosValidos,
     novos_abertos: novosAb,
     novos_previstos: novosPr,
   };
 }
 
-// ROTAS
-
+// ---- ROTAS ----
 
 app.get("/", (req, res) => {
   res.json({ status: "ok", msg: "API de concursos ativa" });
@@ -274,7 +307,7 @@ app.get("/concursos/novos", async (req, res) => {
 
 app.get("/concursos/policia-civil-sp", async (req, res) => {
   try {
-    const { abertos } = await buscarConcursosSP();
+    const { abertos } = await syncConcursosSP();
     res.json(filtrarPorOrgao(abertos, ORGAOS.pcsp));
   } catch (err) {
     res.status(500).json({ error: "Erro PC-SP" });
@@ -283,7 +316,7 @@ app.get("/concursos/policia-civil-sp", async (req, res) => {
 
 app.get("/concursos/policia-federal", async (req, res) => {
   try {
-    const { abertos } = await buscarConcursosSP();
+    const { abertos } = await syncConcursosSP();
     res.json(filtrarPorOrgao(abertos, ORGAOS.pf));
   } catch (err) {
     res.status(500).json({ error: "Erro PF" });
@@ -292,7 +325,7 @@ app.get("/concursos/policia-federal", async (req, res) => {
 
 app.get("/concursos/abin", async (req, res) => {
   try {
-    const { abertos } = await buscarConcursosSP();
+    const { abertos } = await syncConcursosSP();
     res.json(filtrarPorOrgao(abertos, ORGAOS.abin));
   } catch (err) {
     res.status(500).json({ error: "Erro ABIN" });
@@ -301,7 +334,7 @@ app.get("/concursos/abin", async (req, res) => {
 
 app.get("/concursos/ti-sp", async (req, res) => {
   try {
-    const { abertos } = await buscarConcursosSP();
+    const { abertos } = await syncConcursosSP();
     res.json(filtrarTI(abertos));
   } catch (err) {
     res.status(500).json({ error: "Erro TI" });
